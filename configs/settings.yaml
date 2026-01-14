@@ -1,0 +1,71 @@
+# 基础配置
+base:
+  # 日志级别: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+  # 截图保存路径
+  screenshot_path: "./screenshots"
+  # 模板图片路径
+  template_path: "./templates"
+  # 配置文件路径
+  config_path: "./configs"
+  # 数据文件路径
+  data_path: "./data"
+
+# 自动化参数
+automation:
+  # 图像匹配阈值 (0-1)
+  confidence: 0.8
+  # 点击延迟 (秒)
+  click_delay: 0.5
+  # 寻找目标重试次数
+  retry_times: 3
+  # 重试间隔 (秒)
+  retry_interval: 1.0
+  # 移动速度 (像素/秒)
+  move_speed: 1000
+  # 是否启用防检测
+  anti_detection: false
+  move_duration: 0.3
+  confidence_threshold: 0.8
+  default_delay_before: 0.5
+  default_delay_after: 1.0
+  default_random_offset: 5
+  humanize_mouse: true
+  humanize_speed: 0.5
+
+# 日志配置
+logging:
+  # 是否启用文件日志
+  enable_file_log: true
+  # 是否启用控制台日志
+  enable_console_log: true
+  # 日志文件最大大小 (MB)
+  max_file_size: 10
+  # 保留的日志文件数量
+  backup_count: 5
+
+tasks: []
+
+# 游戏自动化工具配置
+general:
+  debug_mode: false
+  log_level: "INFO"
+  screenshot_quality: 85
+  log_file: "logs/automation.log"
+
+recognition:
+  default_match_method: "adaptive"
+  default_threshold: 0.8
+  default_preprocess: "adaptive"
+  tesseract_path: "D:\\DevTools\\Tesseract-OCR\\tesseract.exe"
+  ocr_languages: "chi_sim+eng"
+  use_multiscale: true
+  multiscale_range: [0.8, 1.2, 0.1]
+
+performance:
+  max_attempts: 3
+  retry_delay: 1.0
+  timeout: 10.0
+  cache_size: 100
+
+  
