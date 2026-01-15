@@ -433,6 +433,53 @@ def test_basic_functions():
     
     logger.info("基础功能测试完成")
 
+def click(x: int, y: int, button: str = 'left', clicks: int = 1) -> bool:
+    """
+    在指定位置点击（便捷函数）
+    
+    Args:
+        x: X坐标
+        y: Y坐标
+        button: 鼠标按钮
+        clicks: 点击次数
+        
+    Returns:
+        是否点击成功
+    """
+    automation = AutomationCore()
+    return automation.click(x, y, button=button, clicks=clicks)
+
+
+def find_image(template_path: str, 
+               region: tuple = None, 
+               confidence: float = 0.8) -> Optional[Tuple[int, int, int, int]]:
+    """
+    在屏幕上查找图片（便捷函数）
+    
+    Args:
+        template_path: 模板图片路径
+        region: 搜索区域
+        confidence: 匹配置信度
+        
+    Returns:
+        找到的位置 (left, top, width, height)
+    """
+    automation = AutomationCore()
+    return automation.find_image(template_path, region=region, confidence=confidence)
+
+
+def capture_screen(region: tuple = None) -> Image.Image:
+    """
+    截取屏幕截图（便捷函数）
+    
+    Args:
+        region: 截图区域 (left, top, width, height)
+        
+    Returns:
+        PIL Image对象
+    """
+    automation = AutomationCore()
+    return automation.screenshot(region=region)
 
 if __name__ == "__main__":
     from ..utils.logger import setup_logger

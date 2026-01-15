@@ -12,8 +12,6 @@
 - ✅ 配置文件管理
 - 🔄 模板图片捕获工具
 
-## 快速开始
-
 ### 1. 安装依赖
 ```bash
 pip install -r requirements.txt
@@ -26,13 +24,25 @@ python main.py
 
 ### 3. 捕获模板图片
 ```bash
-python capture_template.py
-```
+# 截屏
+python scripts/capture_template.py
 
-### 4. 运行测试
-```bash
+# 测试
 python tests/test_basic.py
 ```
+
+### 4. 集成OpenCV进行图像预处理
+```bash
+# 将要查找的图片保存到项目根目录 templates/test_template.png
+python tests/test_smart_automation.py
+
+# 创建模板
+python scripts/create_template.py
+
+# 运行综合测试
+python tests/test_opencv_matching.py
+```
+
 
 ### 基本使用
 ```python

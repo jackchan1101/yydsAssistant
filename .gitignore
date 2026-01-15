@@ -17,5 +17,8 @@ __diff_output__/
 *.log.*
 
 /screenshots
+/outputs
+/temps
 /templates
 /venv
+*.pyc
