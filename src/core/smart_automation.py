@@ -33,6 +33,9 @@ class MatchResult:
     method: Optional[str] = None  # 使用的匹配方法
     screen_region: Optional[Tuple[int, int, int, int]] = None  # 搜索区域 (left, top, width, height)
     scale: Optional[float] = None  # 匹配时的缩放比例（仅多尺度匹配）
+    homography: Optional[np.ndarray] = None  # 单应性矩阵（仅特征匹配）
+    matches_count: Optional[int] = None  # 匹配点数量（仅特征匹配）
+    template_size: Optional[Tuple[int, int]] = None  # 模板尺寸
 
 
 class SmartAutomation:
@@ -373,8 +376,8 @@ class SmartAutomation:
                             template_path: str, 
                             screen_region: Optional[Tuple[int, int, int, int]] = None,
                             threshold: Optional[float] = None,
-                            scale_range: Tuple[float, float] = (0.5, 2.0),
-                            scale_steps: int = 20) -> MatchResult:
+                            scale_range: Tuple[float, float] = (0.5, 1.5),
+                            scale_steps: int = 10) -> MatchResult:
         """
         在多尺度下搜索模板图像
         
@@ -412,7 +415,7 @@ class SmartAutomation:
             # 4. 获取匹配配置
             match_config = self.config.get('matching', {})
             method = match_config.get('method', cv2.TM_CCOEFF_NORMED)
-            match_threshold = threshold or match_config.get('threshold', 0.8)
+            match_threshold = threshold or match_config.get('threshold', 0.7)
             
             # 5. 多尺度搜索
             best_match = MatchResult(found=False, confidence=0.0)
@@ -577,9 +580,11 @@ class SmartAutomation:
                         method=f"Feature-{method}",
                         screen_region=screen_region,
                         homography=H,
-                        matches_count=len(good_matches)
+                        matches_count=len(good_matches),
+                        template_size=(w, h)
                     )
-            
+
+            # 修改失败时的返回
             return MatchResult(
                 found=False,
                 confidence=float(confidence),
@@ -590,6 +595,7 @@ class SmartAutomation:
         except Exception as e:
             logger.error(f"特征匹配过程中发生错误: {e}")
             return MatchResult(found=False)
+        
     # 智能匹配器
     def smart_find_image(self, 
                         template_path: str, 
@@ -614,7 +620,7 @@ class SmartAutomation:
         if methods is None:
             methods = ['template', 'multi_scale', 'orb']
         
-        best_result = MatchResult(found=False, confidence=0.0)
+        best_result = MatchResult(found=False, confidence=0.0, method="None")
         
         for method in methods:
             try:
@@ -634,7 +640,7 @@ class SmartAutomation:
                 
                 # 如果找到高置信度匹配，提前返回
                 if result.found and result.confidence >= 0.9:
-                    logger.info(f"智能匹配: 使用{method}找到高置信度匹配")
+                    logger.info(f"智能匹配: 使用{result.method}找到高置信度匹配")
                     return result
                     
             except Exception as e:
@@ -644,6 +650,40 @@ class SmartAutomation:
         logger.info(f"智能匹配完成: 最佳方法={best_result.method}, "
                 f"置信度={best_result.confidence:.3f}")
         return best_result
+    
+    def optimize_config_for_image(self, template_path: str, image_type: str = "ui") -> Dict:
+        """
+        根据图像类型优化配置
+        
+        Args:
+            template_path: 模板路径
+            image_type: 图像类型 ('ui', 'icon', 'text', 'complex')
+            
+        Returns:
+            优化后的配置字典
+        """
+        configs = {
+            'ui': {
+                'preprocess': {'grayscale': True, 'blur_kernel': (3, 3)},
+                'matching': {'threshold': 0.8, 'method': cv2.TM_CCOEFF_NORMED}
+            },
+            'icon': {
+                'preprocess': {'grayscale': True, 'blur_kernel': (5, 5)},
+                'matching': {'threshold': 0.7, 'method': cv2.TM_CCORR_NORMED}
+            },
+            'text': {
+                'preprocess': {'grayscale': True, 'threshold_type': 'otsu'},
+                'matching': {'threshold': 0.6, 'method': cv2.TM_CCOEFF_NORMED}
+            },
+            'complex': {
+                'preprocess': {'grayscale': True, 'blur_kernel': (3, 3)},
+                'matching': {'threshold': 0.7},
+                'use_features': True,
+                'feature_method': 'orb'
+            }
+        }
+        
+        return configs.get(image_type, configs['ui'])
 
 def cv2_tm_method_to_str(method: int) -> str:
     """将OpenCV模板匹配方法转换为字符串表示"""

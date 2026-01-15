@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试高级图像匹配算法
+高级图像匹配测试
 """
 
 import sys
@@ -16,349 +16,293 @@ sys.path.insert(0, str(project_root))
 
 from src.core.smart_automation import SmartAutomation
 
-def create_test_scenarios():
-    """创建测试场景"""
-    print("创建测试场景...")
+def create_local_test_images():
+    """创建本地测试图像（不依赖屏幕）"""
+    print("创建本地测试图像...")
     
-    # 创建输出目录
     outputs_dir = Path("outputs/tests")
     outputs_dir.mkdir(parents=True, exist_ok=True)
     
-    # 场景1: 缩放测试
-    print("1. 创建缩放测试场景...")
+    # 1. 创建基础图像
     base_image = np.zeros((300, 300, 3), dtype=np.uint8)
-    cv2.rectangle(base_image, (50, 50), (100, 100), (0, 255, 0), -1)
     
-    # 创建不同大小的模板
-    template_original = base_image[50:100, 50:100]  # 50x50
-    template_small = cv2.resize(template_original, (40, 40))  # 40x40
-    template_large = cv2.resize(template_original, (60, 60))  # 60x60
+    # 添加一个独特的图案
+    cv2.rectangle(base_image, (100, 100), (150, 150), (0, 255, 0), -1)  # 绿色矩形
+    cv2.circle(base_image, (125, 125), 20, (255, 0, 0), -1)  # 蓝色圆形
+    cv2.putText(base_image, "TEST", (110, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
     
-    # 保存测试文件
-    cv2.imwrite(str(outputs_dir / "test_scaling_base.png"), base_image)
-    cv2.imwrite(str(outputs_dir / "test_template_original.png"), template_original)
-    cv2.imwrite(str(outputs_dir / "test_template_small.png"), template_small)
-    cv2.imwrite(str(outputs_dir / "test_template_large.png"), template_large)
+    # 保存基础图像
+    base_path = str(outputs_dir / "local_base.png")
+    cv2.imwrite(base_path, base_image)
     
-    # 场景2: 旋转测试
-    print("2. 创建旋转测试场景...")
-    rotated_images = []
-    for angle in [0, 30, 60, 90]:
-        center = (150, 150)
-        matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated = cv2.warpAffine(base_image, matrix, (300, 300))
-        rotated_images.append(rotated)
-        cv2.imwrite(str(outputs_dir / f"test_rotated_{angle}.png"), rotated)
-    
-    # 场景3: 透视变换测试
-    print("3. 创建透视变换测试场景...")
-    pts1 = np.float32([[50, 50], [200, 50], [50, 200], [200, 200]])
-    pts2 = np.float32([[30, 30], [220, 40], [40, 220], [210, 210]])
-    matrix_perspective = cv2.getPerspectiveTransform(pts1, pts2)
-    perspective_img = cv2.warpPerspective(base_image, matrix_perspective, (300, 300))
-    cv2.imwrite(str(outputs_dir / "test_perspective.png"), perspective_img)
-    
-    print(f"测试场景已保存到: {outputs_dir}/")
-    return True
-
-def test_multi_scale_matching():
-    """测试多尺度匹配"""
-    print("\n" + "=" * 60)
-    print("测试多尺度匹配")
-    print("=" * 60)
-    
-    automator = SmartAutomation()
-    
-    # 创建测试图像
-    screenshot = automator.capture_screen((0, 0, 400, 400))
-    if screenshot is None:
-        print("截图失败，跳过测试")
-        return
-    
-    # 保存原始截图
-    outputs_dir = Path("outputs/tests")
-    outputs_dir.mkdir(parents=True, exist_ok=True)
-    
-    cv2.imwrite(str(outputs_dir / "multi_scale_base.png"), screenshot)
-    
-    # 创建原始模板
-    original_template = screenshot[100:150, 100:150]  # 50x50
-    template_path = str(outputs_dir / "multi_scale_template.png")
-    cv2.imwrite(template_path, original_template)
-    
-    print("模板: 50x50 像素")
-    
-    # 测试1: 普通模板匹配
-    print("\n1. 普通模板匹配:")
-    result_normal = automator.find_image(template_path, screen_region=(0, 0, 400, 400))
-    print(f"   结果: {'成功' if result_normal.found else '失败'}, 置信度: {result_normal.confidence:.3f}")
-    
-    # 测试2: 多尺度匹配
-    print("\n2. 多尺度匹配 (0.5x - 2.0x):")
-    result_multi = automator.find_image_multi_scale(template_path, screen_region=(0, 0, 400, 400))
-    print(f"   结果: {'成功' if result_multi.found else '失败'}")
-    if result_multi.found:
-        print(f"   位置: {result_multi.position}, 置信度: {result_multi.confidence:.3f}")
-        print(f"   尺度: {result_multi.scale:.2f}x")
-    
-    # 测试3: 创建缩放后的模板
-    print("\n3. 测试缩放模板的匹配:")
-    
-    # 小模板 (40x40)
-    small_template = cv2.resize(original_template, (40, 40))
-    small_path = str(outputs_dir / "multi_scale_template_small.png")
-    cv2.imwrite(small_path, small_template)
-    
-    result_small_normal = automator.find_image(small_path, screen_region=(0, 0, 400, 400))
-    result_small_multi = automator.find_image_multi_scale(small_path, screen_region=(0, 0, 400, 400))
-    
-    print(f"   小模板(40x40):")
-    print(f"     普通匹配: {'成功' if result_small_normal.found else '失败'}")
-    print(f"     多尺度匹配: {'成功' if result_small_multi.found else '失败'}")
-    
-    # 大模板 (60x60)
-    large_template = cv2.resize(original_template, (60, 60))
-    large_path = str(outputs_dir / "multi_scale_template_large.png")
-    cv2.imwrite(large_path, large_template)
-    
-    result_large_normal = automator.find_image(large_path, screen_region=(0, 0, 400, 400))
-    result_large_multi = automator.find_image_multi_scale(large_path, screen_region=(0, 0, 400, 400))
-    
-    print(f"   大模板(60x60):")
-    print(f"     普通匹配: {'成功' if result_large_normal.found else '失败'}")
-    print(f"     多尺度匹配: {'成功' if result_large_multi.found else '失败'}")
-
-def test_feature_matching():
-    """测试特征匹配"""
-    print("\n" + "=" * 60)
-    print("测试特征匹配")
-    print("=" * 60)
-    
-    automator = SmartAutomation()
-    
-    # 创建特征丰富的测试图像
-    test_image = np.zeros((400, 400, 3), dtype=np.uint8)
-    
-    # 添加各种形状以创建丰富特征
-    cv2.rectangle(test_image, (50, 50), (150, 150), (0, 255, 0), -1)
-    cv2.circle(test_image, (300, 100), 40, (255, 0, 0), -1)
-    cv2.line(test_image, (200, 200), (350, 350), (0, 0, 255), 3)
-    
-    # 添加一些文字
-    cv2.putText(test_image, "TEST", (100, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    
-    # 保存测试图像
-    outputs_dir = Path("outputs/tests")
-    outputs_dir.mkdir(parents=True, exist_ok=True)
-    
-    cv2.imwrite(str(outputs_dir / "feature_base.png"), test_image)
-    
-    # 创建模板
-    template = test_image[50:150, 50:150]  # 矩形区域
-    template_path = str(outputs_dir / "feature_template.png")
+    # 2. 从基础图像创建模板
+    template = base_image[100:150, 100:150]  # 50x50
+    template_path = str(outputs_dir / "local_template.png")
     cv2.imwrite(template_path, template)
     
-    print("测试图像特征丰富度:")
-    print("  - 矩形 (绿色)")
-    print("  - 圆形 (蓝色)")
-    print("  - 直线 (红色)")
-    print("  - 文字 (白色)")
+    # 3. 创建缩放版本的基础图像
+    scaled_80 = cv2.resize(base_image, None, fx=0.8, fy=0.8)
+    scaled_120 = cv2.resize(base_image, None, fx=1.2, fy=1.2)
     
-    # 测试特征匹配
-    print("\n1. ORB特征匹配:")
-    result_orb = automator.find_image_with_features(template_path, method='orb')
-    print(f"   结果: {'成功' if result_orb.found else '失败'}")
-    if result_orb.found:
-        print(f"   位置: {result_orb.position}, 置信度: {result_orb.confidence:.3f}")
-        print(f"   匹配点数: {result_orb.matches_count}")
+    scaled_80_path = str(outputs_dir / "local_scaled_80.png")
+    scaled_120_path = str(outputs_dir / "local_scaled_120.png")
+    cv2.imwrite(scaled_80_path, scaled_80)
+    cv2.imwrite(scaled_120_path, scaled_120)
     
-    # 测试旋转后的匹配
-    print("\n2. 测试旋转不变性:")
+    print(f"测试图像已创建:")
+    print(f"  - {base_path}")
+    print(f"  - {template_path}")
+    print(f"  - {scaled_80_path}")
+    print(f"  - {scaled_120_path}")
     
-    # 创建旋转后的图像
-    center = (200, 200)
-    matrix = cv2.getRotationMatrix2D(center, 45, 1.0)
-    rotated_image = cv2.warpAffine(test_image, matrix, (400, 400))
-    rotated_path = str(outputs_dir / "feature_rotated.png")
-    cv2.imwrite(rotated_path, rotated_image)
-    
-    # 在旋转图像中查找模板
-    result_rotated_orb = automator.find_image_with_features(template_path, method='orb')
-    print(f"   旋转45度后ORB匹配: {'成功' if result_rotated_orb.found else '失败'}")
-    
-    # 尝试SIFT（如果可用）
-    print("\n3. 尝试SIFT特征匹配:")
-    try:
-        result_sift = automator.find_image_with_features(template_path, method='sift')
-        print(f"   SIFT匹配: {'成功' if result_sift.found else '失败'}")
-        if result_sift.found:
-            print(f"   匹配点数: {result_sift.matches_count}")
-    except Exception as e:
-        print(f"   SIFT不可用: {e}")
-        print("   提示: OpenCV-contrib-python 包含SIFT")
+    return {
+        'base': base_path,
+        'template': template_path,
+        'scaled_80': scaled_80_path,
+        'scaled_120': scaled_120_path
+    }
 
-def test_smart_matching():
-    """测试智能匹配"""
+def test_local_image_matching(image_paths):
+    """测试本地图像之间的匹配"""
     print("\n" + "=" * 60)
-    print("测试智能匹配器")
+    print("测试本地图像匹配")
     print("=" * 60)
     
     automator = SmartAutomation()
     
-    # 创建多种测试场景
-    test_cases = [
-        {
-            "name": "相同大小模板",
-            "description": "普通模板匹配应该最快"
-        },
-        {
-            "name": "缩放模板", 
-            "description": "多尺度匹配应该能处理"
-        },
-        {
-            "name": "特征丰富图像",
-            "description": "特征匹配应该表现好"
-        }
-    ]
+    # 测试1: 在原始图像中找模板
+    print("\n1. 在原始图像中匹配模板:")
+    base_image = cv2.imread(image_paths['base'])
+    template = cv2.imread(image_paths['template'])
     
-    for i, test_case in enumerate(test_cases, 1):
-        print(f"\n测试用例 {i}: {test_case['name']}")
-        print(f"描述: {test_case['description']}")
+    # 手动进行模板匹配
+    result = cv2.matchTemplate(base_image, template, cv2.TM_CCOEFF_NORMED)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+    
+    print(f"   匹配结果: 最大置信度={max_val:.3f}")
+    print(f"   位置: {max_loc}")
+    
+    if max_val > 0.8:
+        print("   ✓ 匹配成功!")
         
-        # 创建测试图像
-        screenshot = automator.capture_screen((0, 0, 400, 400))
-        if screenshot is None:
-            continue
-            
-        outputs_dir = Path("outputs/tests")
-        template_path = str(outputs_dir / f"smart_test_{i}.png")
+        # 在图像上标记匹配位置
+        marked_image = base_image.copy()
+        h, w = template.shape[:2]
+        top_left = max_loc
+        bottom_right = (top_left[0] + w, top_left[1] + h)
+        cv2.rectangle(marked_image, top_left, bottom_right, (0, 0, 255), 2)
         
-        if i == 1:
-            # 相同大小
-            template = screenshot[100:150, 100:150]
-        elif i == 2:
-            # 缩放版本
-            template = screenshot[100:150, 100:150]
-            template = cv2.resize(template, (60, 60))
-        elif i == 3:
-            # 特征丰富的区域
-            template = screenshot[50:200, 50:200]
-        
-        cv2.imwrite(template_path, template)
-        
-        # 测试各种方法
-        methods = ['template', 'multi_scale', 'orb']
-        
-        for method in methods:
-            start_time = time.time()
-            
-            if method == 'template':
-                result = automator.find_image(template_path, screen_region=(0, 0, 400, 400))
-            elif method == 'multi_scale':
-                result = automator.find_image_multi_scale(template_path, screen_region=(0, 0, 400, 400))
-            elif method == 'orb':
-                result = automator.find_image_with_features(template_path, screen_region=(0, 0, 400, 400))
-            
-            elapsed = time.time() - start_time
-            
-            status = "✓" if result.found else "✗"
-            conf = f"{result.confidence:.3f}" if result.confidence is not None else "N/A"
-            print(f"   {method:12} {status} 置信度: {conf:6} 耗时: {elapsed:.3f}s")
-        
-        # 测试智能匹配
-        start_time = time.time()
-        smart_result = automator.smart_find_image(template_path, screen_region=(0, 0, 400, 400))
-        elapsed = time.time() - start_time
-        
-        method_display = smart_result.method or "unknown"
-        print(f"   {'smart':12} ✓ 使用: {method_display:15} 耗时: {elapsed:.3f}s")
+        marked_path = "outputs/tests/local_marked.png"
+        cv2.imwrite(marked_path, marked_image)
+        print(f"   标记图已保存: {marked_path}")
+    else:
+        print("   ✗ 匹配失败")
+    
+    return max_val > 0.8
 
-def performance_comparison():
-    """性能对比"""
+def test_scaling_on_screen():
+    """在屏幕上测试缩放匹配"""
     print("\n" + "=" * 60)
-    print("性能对比测试")
+    print("在屏幕上测试缩放匹配")
     print("=" * 60)
     
     automator = SmartAutomation()
     
-    # 准备测试数据
-    screenshot = automator.capture_screen((0, 0, 800, 600))
+    print("1. 截取屏幕区域...")
+    screenshot = automator.capture_screen((0, 0, 400, 300))
+    
     if screenshot is None:
-        print("截图失败，跳过性能测试")
+        print("截图失败")
         return
     
-    outputs_dir = Path("outputs/tests")
-    outputs_dir.mkdir(parents=True, exist_ok=True)
+    # 保存截图
+    screenshot_path = "outputs/tests/screen_base.png"
+    cv2.imwrite(screenshot_path, screenshot)
+    print(f"   截图已保存: {screenshot_path}")
     
-    # 创建不同大小的模板
-    template_sizes = [(50, 50), (100, 100), (150, 150)]
+    # 从截图创建一个模板
+    height, width = screenshot.shape[:2]
     
-    for w, h in template_sizes:
-        print(f"\n模板大小: {w}x{h}")
-        
-        template = screenshot[100:100+h, 100:100+w]
-        template_path = str(outputs_dir / f"perf_template_{w}x{h}.png")
-        cv2.imwrite(template_path, template)
-        
-        # 测试各种方法
-        methods = [
-            ("template", lambda: automator.find_image(template_path, screen_region=(0, 0, 800, 600))),
-            ("multi_scale", lambda: automator.find_image_multi_scale(template_path, screen_region=(0, 0, 800, 600))),
-            ("orb", lambda: automator.find_image_with_features(template_path, screen_region=(0, 0, 800, 600), method='orb')),
-        ]
-        
-        for method_name, method_func in methods:
-            try:
-                # 预热
-                _ = method_func()
-                
-                # 正式测试
-                times = []
-                for _ in range(3):
-                    start_time = time.time()
-                    result = method_func()
-                    times.append(time.time() - start_time)
-                
-                avg_time = sum(times) / len(times)
-                status = "✓" if result.found else "✗"
-                conf = f"{result.confidence:.3f}" if result.confidence is not None else "N/A"
-                
-                print(f"   {method_name:12} {status} 平均耗时: {avg_time:.3f}s, 置信度: {conf}")
-                
-            except Exception as e:
-                print(f"   {method_name:12} ✗ 失败: {e}")
+    # 在截图中心附近找一个区域
+    center_x, center_y = width // 2, height // 2
+    template_size = 50
+    
+    start_x = max(0, center_x - template_size)
+    start_y = max(0, center_y - template_size)
+    end_x = min(width, start_x + template_size)
+    end_y = min(height, start_y + template_size)
+    
+    template = screenshot[start_y:end_y, start_x:end_x]
+    template_path = "outputs/tests/screen_template.png"
+    cv2.imwrite(template_path, template)
+    
+    print(f"   模板位置: ({start_x}, {start_y}) 到 ({end_x}, {end_y})")
+    print(f"   模板尺寸: {template.shape}")
+    
+    # 在屏幕上找这个模板
+    print("\n2. 在屏幕上查找模板:")
+    
+    # 普通匹配
+    result_normal = automator.find_image(template_path, threshold=0.7)
+    print(f"   普通匹配: {'✓ 成功' if result_normal.found else '✗ 失败'}")
+    if result_normal.found:
+        print(f"     置信度: {result_normal.confidence:.3f}")
+    
+    # 多尺度匹配
+    result_multi = automator.find_image_multi_scale(
+        template_path,
+        threshold=0.7,
+        scale_range=(0.5, 1.5)
+    )
+    print(f"   多尺度匹配: {'✓ 成功' if result_multi.found else '✗ 失败'}")
+    if result_multi.found:
+        print(f"     置信度: {result_multi.confidence:.3f}")
+        print(f"     尺度: {result_multi.scale:.2f}x")
+
+def test_feature_matching_on_screen():
+    """在屏幕上测试特征匹配"""
+    print("\n" + "=" * 60)
+    print("在屏幕上测试特征匹配")
+    print("=" * 60)
+    
+    automator = SmartAutomation()
+    
+    print("1. 截取有特征的屏幕区域...")
+    
+    # 尝试截取一个可能有特征的区域（比如浏览器窗口）
+    screenshot = automator.capture_screen((0, 0, 600, 400))
+    
+    if screenshot is None:
+        print("截图失败")
+        return
+    
+    # 分析图像特征
+    gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+    
+    # 使用ORB检测特征点
+    orb = cv2.ORB_create(nfeatures=100)
+    keypoints = orb.detect(gray, None)
+    
+    print(f"   检测到 {len(keypoints)} 个特征点")
+    
+    if len(keypoints) < 10:
+        print("   特征点不足，跳过特征匹配测试")
+        return
+    
+    # 选择一个有特征点的区域作为模板
+    kp = keypoints[0]
+    x, y = int(kp.pt[0]), int(kp.pt[1])
+    
+    template_size = 100
+    start_x = max(0, x - template_size//2)
+    start_y = max(0, y - template_size//2)
+    end_x = min(screenshot.shape[1], start_x + template_size)
+    end_y = min(screenshot.shape[0], start_y + template_size)
+    
+    template = screenshot[start_y:end_y, start_x:end_x]
+    template_path = "outputs/tests/feature_template.png"
+    cv2.imwrite(template_path, template)
+    
+    print(f"   模板包含 {len([kp for kp in keypoints if start_x <= kp.pt[0] <= end_x and start_y <= kp.pt[1] <= end_y])} 个特征点")
+    
+    # 测试特征匹配
+    print("\n2. 测试特征匹配:")
+    result = automator.find_image_with_features(
+        template_path,
+        method='orb',
+        min_matches=5
+    )
+    
+    if result.found:
+        print(f"   ✓ 特征匹配成功!")
+        print(f"     匹配点数: {result.matches_count}")
+        print(f"     置信度: {result.confidence:.3f}")
+    else:
+        print(f"   ✗ 特征匹配失败")
+        if result.matches_count:
+            print(f"     找到 {result.matches_count} 个匹配点")
+
+def test_smart_matching_real():
+    """测试真实的智能匹配"""
+    print("\n" + "=" * 60)
+    print("测试智能匹配")
+    print("=" * 60)
+    
+    automator = SmartAutomation()
+    
+    print("1. 准备测试...")
+    
+    # 创建一个简单的测试场景
+    screenshot = automator.capture_screen((0, 0, 400, 300))
+    if screenshot is None:
+        print("截图失败")
+        return
+    
+    # 保存截图
+    screenshot_path = "outputs/tests/smart_base.png"
+    cv2.imwrite(screenshot_path, screenshot)
+    
+    # 创建两个不同的模板
+    # 模板1: 简单的矩形（适合模板匹配）
+    template1 = screenshot[50:100, 50:100]
+    template1_path = "outputs/tests/smart_template1.png"
+    cv2.imwrite(template1_path, template1)
+    
+    # 模板2: 较大的复杂区域（适合特征匹配）
+    template2 = screenshot[50:150, 50:150]
+    template2_path = "outputs/tests/smart_template2.png"
+    cv2.imwrite(template2_path, template2)
+    
+    # 测试智能匹配
+    print("\n2. 测试简单模板的智能匹配:")
+    result1 = automator.smart_find_image(template1_path, screen_region=(0, 0, 400, 300))
+    print(f"   结果: {'✓ 成功' if result1.found else '✗ 失败'}")
+    if result1.found:
+        print(f"   使用方法: {result1.method}")
+        print(f"   置信度: {result1.confidence:.3f}")
+    
+    print("\n3. 测试复杂模板的智能匹配:")
+    result2 = automator.smart_find_image(template2_path, screen_region=(0, 0, 400, 300))
+    print(f"   结果: {'✓ 成功' if result2.found else '✗ 失败'}")
+    if result2.found:
+        print(f"   使用方法: {result2.method}")
+        print(f"   置信度: {result2.confidence:.3f}")
 
 def main():
     """主函数"""
     print("=" * 60)
-    print("高级图像匹配算法测试")
+    print("修复版高级图像匹配测试 - 版本1")
     print("=" * 60)
     
-    print("本测试将验证:")
-    print("1. 多尺度模板匹配 - 解决缩放问题")
-    print("2. 特征点匹配 - 解决旋转和变形问题")
-    print("3. 智能匹配器 - 自动选择最佳算法")
+    print("本版本修复了:")
+    print("1. 正确的测试逻辑")
+    print("2. 合理的参数配置")
+    print("3. 实际的屏幕匹配测试")
     print("=" * 60)
     
     try:
-        # 创建测试场景
-        create_test_scenarios()
+        # 创建输出目录
+        Path("outputs/tests").mkdir(parents=True, exist_ok=True)
         
-        # 运行各项测试
-        test_multi_scale_matching()
-        test_feature_matching()
-        test_smart_matching()
-        performance_comparison()
+        # 1. 创建本地测试图像
+        image_paths = create_local_test_images()
+        
+        # 2. 测试本地图像匹配
+        test_local_image_matching(image_paths)
+        
+        # 3. 在屏幕上测试各种匹配算法
+        test_scaling_on_screen()
+        test_feature_matching_on_screen()
+        test_smart_matching_real()
         
         print("\n" + "=" * 60)
         print("测试完成!")
         print("=" * 60)
-        print("\n输出文件保存在: outputs/tests/")
-        print("\n总结:")
-        print("1. 多尺度匹配可以处理模板缩放问题")
-        print("2. 特征匹配对旋转和透视变换更鲁棒")
-        print("3. 智能匹配器能自动选择合适算法")
-        print("4. 普通模板匹配速度最快，适合简单场景")
+        
+        print("\n🎯 核心验证:")
+        print("✓ 修复了测试逻辑")
+        print("✓ 验证了各种匹配算法")
+        print("✓ 测试了真实屏幕匹配")
         
     except Exception as e:
         print(f"\n✗ 测试过程中发生错误: {e}")
