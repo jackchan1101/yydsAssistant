@@ -6,7 +6,7 @@
 import time
 import logging
 import numpy as np
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 from dataclasses import dataclass
 
 import cv2
@@ -32,6 +32,7 @@ class MatchResult:
     confidence: Optional[float] = None  # 匹配置信度 (0-1)
     method: Optional[str] = None  # 使用的匹配方法
     screen_region: Optional[Tuple[int, int, int, int]] = None  # 搜索区域 (left, top, width, height)
+    scale: Optional[float] = None  # 匹配时的缩放比例（仅多尺度匹配）
 
 
 class SmartAutomation:
@@ -367,7 +368,282 @@ class SmartAutomation:
         except Exception as e:
             logger.error(f"查找所有图像时发生错误: {e}")
             return []
-
+    # 在多尺度下搜索模板图像
+    def find_image_multi_scale(self, 
+                            template_path: str, 
+                            screen_region: Optional[Tuple[int, int, int, int]] = None,
+                            threshold: Optional[float] = None,
+                            scale_range: Tuple[float, float] = (0.5, 2.0),
+                            scale_steps: int = 20) -> MatchResult:
+        """
+        在多尺度下搜索模板图像
+        
+        Args:
+            template_path: 模板图像路径
+            screen_region: 屏幕搜索区域
+            threshold: 匹配阈值
+            scale_range: 缩放范围 (最小比例, 最大比例)
+            scale_steps: 缩放步数
+            
+        Returns:
+            MatchResult: 最佳匹配结果
+        """
+        try:
+            # 1. 加载模板
+            template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
+            if template is None:
+                logger.error(f"无法加载模板图像: {template_path}")
+                return MatchResult(found=False)
+            
+            # 2. 捕获屏幕
+            screen = self.capture_screen(screen_region)
+            
+            # 3. 预处理
+            screen_processed = self.preprocess_image(screen)
+            template_processed = self.preprocess_image(template)
+            
+            # 确保图像维度一致
+            if len(screen_processed.shape) != len(template_processed.shape):
+                if len(screen_processed.shape) == 3:
+                    screen_processed = cv2.cvtColor(screen_processed, cv2.COLOR_BGR2GRAY)
+                elif len(template_processed.shape) == 3:
+                    template_processed = cv2.cvtColor(template_processed, cv2.COLOR_BGR2GRAY)
+            
+            # 4. 获取匹配配置
+            match_config = self.config.get('matching', {})
+            method = match_config.get('method', cv2.TM_CCOEFF_NORMED)
+            match_threshold = threshold or match_config.get('threshold', 0.8)
+            
+            # 5. 多尺度搜索
+            best_match = MatchResult(found=False, confidence=0.0)
+            original_h, original_w = template_processed.shape[:2]
+            
+            for scale in np.linspace(scale_range[0], scale_range[1], scale_steps):
+                # 计算当前尺度的模板尺寸
+                width = int(original_w * scale)
+                height = int(original_h * scale)
+                
+                # 跳过无效尺寸
+                if width < 10 or height < 10 or width > screen_processed.shape[1] or height > screen_processed.shape[0]:
+                    continue
+                
+                # 缩放模板
+                scaled_template = cv2.resize(template_processed, (width, height), 
+                                            interpolation=cv2.INTER_AREA)
+                
+                # 模板匹配
+                result = cv2.matchTemplate(screen_processed, scaled_template, method)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                
+                # 根据匹配方法判断最佳匹配
+                if method in [cv2.TM_SQDIFF, cv2.TM_SQDIFF_NORMED]:
+                    match_val = 1 - min_val
+                    match_loc = min_loc
+                else:
+                    match_val = max_val
+                    match_loc = max_loc
+                
+                # 更新最佳匹配
+                if match_val > best_match.confidence:
+                    if match_val >= match_threshold:
+                        # 计算实际位置
+                        left, top = match_loc
+                        center_x = left + width // 2
+                        center_y = top + height // 2
+                        
+                        if screen_region:
+                            center_x += screen_region[0]
+                            center_y += screen_region[1]
+                        
+                        best_match = MatchResult(
+                            found=True,
+                            position=(center_x, center_y),
+                            confidence=float(match_val),
+                            method=f"MultiScale-{cv2_tm_method_to_str(method)}",
+                            screen_region=screen_region,
+                            scale=scale
+                        )
+                    else:
+                        best_match.confidence = float(match_val)
+            
+            if best_match.found:
+                logger.info(f"多尺度匹配成功: {template_path}, 尺度: {best_match.scale:.2f}, "
+                        f"置信度: {best_match.confidence:.3f}")
+            else:
+                logger.debug(f"多尺度匹配失败: {template_path}, 最佳匹配值: {best_match.confidence:.3f}")
+            
+            return best_match
+            
+        except Exception as e:
+            logger.error(f"多尺度匹配过程中发生错误: {e}")
+            return MatchResult(found=False)
+    # 特征点匹配
+    def find_image_with_features(self, 
+                            template_path: str, 
+                            screen_region: Optional[Tuple[int, int, int, int]] = None,
+                            method: str = 'orb',
+                            min_matches: int = 10,
+                            ratio_test: float = 0.75) -> MatchResult:
+        """
+        使用特征点匹配算法（支持旋转和尺度不变）
+        
+        Args:
+            template_path: 模板图像路径
+            screen_region: 屏幕搜索区域
+            method: 特征检测方法 ('orb', 'sift', 'brisk')
+            min_matches: 最小匹配点数
+            ratio_test: 比率测试阈值
+        
+        Returns:
+            MatchResult: 匹配结果
+        """
+        try:
+            # 1. 加载模板
+            template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+            if template is None:
+                logger.error(f"无法加载模板图像: {template_path}")
+                return MatchResult(found=False)
+            
+            # 2. 捕获屏幕
+            screen = self.capture_screen(screen_region)
+            screen_gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY) if len(screen.shape) == 3 else screen
+            
+            # 3. 初始化特征检测器
+            if method.lower() == 'orb':
+                detector = cv2.ORB_create(nfeatures=1000)
+                matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+            elif method.lower() == 'sift' and hasattr(cv2, 'SIFT_create'):
+                detector = cv2.SIFT_create()
+                matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+            elif method.lower() == 'brisk':
+                detector = cv2.BRISK_create()
+                matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+            else:
+                logger.error(f"不支持的特征检测方法: {method}")
+                return MatchResult(found=False)
+            
+            # 4. 检测特征点和计算描述符
+            kp1, des1 = detector.detectAndCompute(template, None)
+            kp2, des2 = detector.detectAndCompute(screen_gray, None)
+            
+            if des1 is None or des2 is None or len(kp1) < 4 or len(kp2) < 4:
+                logger.debug(f"特征点不足: 模板{len(kp1) if kp1 else 0}个, 屏幕{len(kp2) if kp2 else 0}个")
+                return MatchResult(found=False, confidence=0.0, method=f"Feature-{method}")
+            
+            # 5. 特征匹配
+            matches = matcher.knnMatch(des1, des2, k=2)
+            
+            # 6. 应用比率测试
+            good_matches = []
+            for m, n in matches:
+                if m.distance < ratio_test * n.distance:
+                    good_matches.append(m)
+            
+            # 7. 判断是否匹配成功
+            match_ratio = len(good_matches) / len(matches) if matches else 0
+            confidence = min(len(good_matches) / min_matches, 1.0)  # 归一化置信度
+            
+            logger.debug(f"特征匹配: 总匹配数={len(matches)}, 好匹配数={len(good_matches)}, "
+                        f"匹配比例={match_ratio:.3f}, 置信度={confidence:.3f}")
+            
+            if len(good_matches) >= min_matches:
+                # 8. 计算单应性矩阵
+                src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                
+                H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                
+                if H is not None:
+                    # 9. 计算模板在屏幕中的位置
+                    h, w = template.shape
+                    pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
+                    dst = cv2.perspectiveTransform(pts, H)
+                    
+                    # 计算中心点
+                    center_x = int(np.mean(dst[:, 0, 0]))
+                    center_y = int(np.mean(dst[:, 0, 1]))
+                    
+                    if screen_region:
+                        center_x += screen_region[0]
+                        center_y += screen_region[1]
+                    
+                    logger.info(f"特征匹配成功: {template_path}, 方法={method}, "
+                            f"匹配点数={len(good_matches)}, 置信度={confidence:.3f}")
+                    
+                    return MatchResult(
+                        found=True,
+                        position=(center_x, center_y),
+                        confidence=float(confidence),
+                        method=f"Feature-{method}",
+                        screen_region=screen_region,
+                        homography=H,
+                        matches_count=len(good_matches)
+                    )
+            
+            return MatchResult(
+                found=False,
+                confidence=float(confidence),
+                method=f"Feature-{method}",
+                matches_count=len(good_matches)
+            )
+            
+        except Exception as e:
+            logger.error(f"特征匹配过程中发生错误: {e}")
+            return MatchResult(found=False)
+    # 智能匹配器
+    def smart_find_image(self, 
+                        template_path: str, 
+                        screen_region: Optional[Tuple[int, int, int, int]] = None,
+                        methods: List[str] = None) -> MatchResult:
+        """
+        智能图像匹配：自动选择最佳匹配算法
+        
+        算法选择策略：
+        1. 先尝试标准模板匹配（最快）
+        2. 如果失败，尝试多尺度模板匹配
+        3. 如果还失败，尝试特征匹配
+        
+        Args:
+            template_path: 模板图像路径
+            screen_region: 屏幕搜索区域
+            methods: 要尝试的方法列表，None时使用默认策略
+            
+        Returns:
+            MatchResult: 最佳匹配结果
+        """
+        if methods is None:
+            methods = ['template', 'multi_scale', 'orb']
+        
+        best_result = MatchResult(found=False, confidence=0.0)
+        
+        for method in methods:
+            try:
+                if method == 'template':
+                    result = self.find_image(template_path, screen_region)
+                elif method == 'multi_scale':
+                    result = self.find_image_multi_scale(template_path, screen_region)
+                elif method in ['orb', 'sift', 'brisk']:
+                    result = self.find_image_with_features(template_path, screen_region, method)
+                else:
+                    logger.warning(f"未知的匹配方法: {method}")
+                    continue
+                
+                # 更新最佳结果
+                if result.found and result.confidence > best_result.confidence:
+                    best_result = result
+                
+                # 如果找到高置信度匹配，提前返回
+                if result.found and result.confidence >= 0.9:
+                    logger.info(f"智能匹配: 使用{method}找到高置信度匹配")
+                    return result
+                    
+            except Exception as e:
+                logger.warning(f"方法 {method} 失败: {e}")
+                continue
+        
+        logger.info(f"智能匹配完成: 最佳方法={best_result.method}, "
+                f"置信度={best_result.confidence:.3f}")
+        return best_result
 
 def cv2_tm_method_to_str(method: int) -> str:
     """将OpenCV模板匹配方法转换为字符串表示"""

@@ -229,7 +229,8 @@ def main():
     finally:
         # 清理可能遗留的测试文件
         test_files = [
-            
+            "temps/test_base_image.png", "temps/test_rotated_image.png", 
+            "temps/test_rotation_template.png", "temps/screen_bottom.png"
         ]
         for file in test_files:
             if os.path.exists(file):
