@@ -1,8 +1,12 @@
 """
 智能自动化核心模块
 集成OpenCV和Tesseract，提供高级的图像识别和自动化功能。
+集成自适应阈值系统。
 """
 
+import sys
+import os
+from pathlib import Path
 import time
 import logging
 import numpy as np
@@ -14,6 +18,12 @@ import pyautogui
 from PIL import ImageGrab, Image
 import pytesseract
 
+# 添加项目根目录到Python路径
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from .adaptive_threshold import AdaptiveThresholdSystem, ImageType
+from ..utils.config_manager import get_config_manager
 from ..utils.logger import get_logger
 from src.core.ocr_recognizer import TextRecognitionResult, OCRRecognizer
 
@@ -51,7 +61,7 @@ class MatchResult:
 
 
 class SmartAutomation:
-    """智能自动化类，集成OpenCV进行图像识别"""
+    """智能自动化类"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -66,6 +76,11 @@ class SmartAutomation:
         # 初始化OCR识别器
         ocr_config = self.config.get('ocr', {})
         self.ocr_recognizer = OCRRecognizer(ocr_config)
+
+        # 初始化自适应阈值系统
+        self.adaptive_system = AdaptiveThresholdSystem(
+            self.config.get('adaptive_threshold', {})
+        )
 
         logger.info("SmartAutomation模块初始化完成")
 
@@ -105,6 +120,27 @@ class SmartAutomation:
                 'advanced': {
                     'use_bilateral_filter': True,
                     'clahe_clip_limit': 2.0,
+                }
+            },
+            'adaptive_threshold': {
+                'analysis': {
+                    'brightness_threshold_low': 50,
+                    'brightness_threshold_high': 200,
+                    'contrast_threshold_low': 20,
+                    'edge_density_threshold': 0.05,
+                },
+                'preprocessing': {
+                    'ui_element': {
+                        'grayscale': True,
+                        'denoise': True,
+                        'threshold_type': 'adaptive',
+                    },
+                    'text': {
+                        'grayscale': True,
+                        'denoise': True,
+                        'threshold_type': 'otsu',
+                        'scale_factor': 2.0,
+                    }
                 }
             }
         }
@@ -876,6 +912,103 @@ class SmartAutomation:
         else:
             logger.warning(f"未找到文本: '{target_text}'")
             return False
+    
+    def adaptive_find_image(self, 
+                           template_path: str, 
+                           screen_region: Optional[Tuple[int, int, int, int]] = None,
+                           confidence_threshold: float = 0.8,
+                           use_adaptive: bool = True) -> Dict[str, Any]:
+        """
+        自适应查找图像
+        
+        Args:
+            template_path: 模板图像路径
+            screen_region: 屏幕区域
+            confidence_threshold: 置信度阈值
+            use_adaptive: 是否使用自适应预处理
+            
+        Returns:
+            Dict: 匹配结果
+        """
+        try:
+            # 截取屏幕
+            screenshot = self.capture_screen(screen_region)
+            if screenshot is None:
+                return {'found': False, 'confidence': 0.0}
+            
+            # 加载模板
+            template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
+            if template is None:
+                logger.error(f"无法加载模板图像: {template_path}")
+                return {'found': False, 'confidence': 0.0}
+            
+            if use_adaptive:
+                # 使用自适应预处理
+                processed_screenshot = self.adaptive_system.adaptive_preprocess(screenshot)
+                processed_template = self.adaptive_system.adaptive_preprocess(template)
+            else:
+                # 使用标准预处理
+                processed_screenshot = self.preprocess_image(screenshot)
+                processed_template = self.preprocess_image(template)
+            
+            # 执行模板匹配
+            result = cv2.matchTemplate(processed_screenshot, processed_template, 
+                                     cv2.TM_CCOEFF_NORMED)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            
+            if max_val >= confidence_threshold:
+                return {
+                    'found': True,
+                    'position': max_loc,
+                    'confidence': float(max_val),
+                    'method': 'adaptive' if use_adaptive else 'standard'
+                }
+            else:
+                return {
+                    'found': False, 
+                    'confidence': float(max_val),
+                    'method': 'adaptive' if use_adaptive else 'standard'
+                }
+                
+        except Exception as e:
+            logger.error(f"自适应图像查找失败: {e}")
+            return {'found': False, 'confidence': 0.0}
+    
+    def analyze_game_environment(self, 
+                               region: Optional[Tuple[int, int, int, int]] = None) -> Dict[str, Any]:
+        """
+        分析游戏环境特征
+        
+        Args:
+            region: 分析区域
+            
+        Returns:
+            Dict: 环境分析结果
+        """
+        try:
+            screenshot = self.capture_screen(region)
+            if screenshot is None:
+                return {}
+            
+            # 分析图像特征
+            analysis_result = self.adaptive_system.analyze_image(screenshot)
+            
+            return {
+                'image_type': analysis_result.image_type.value,
+                'brightness': analysis_result.brightness,
+                'contrast': analysis_result.contrast,
+                'noise_level': analysis_result.noise_level,
+                'edge_density': analysis_result.edge_density,
+                'recommended_params': analysis_result.recommended_params
+            }
+            
+        except Exception as e:
+            logger.error(f"游戏环境分析失败: {e}")
+            return {}
+    
+    def get_adaptive_stats(self) -> Dict[str, Any]:
+        """获取自适应系统统计信息"""
+        return self.adaptive_system.get_performance_stats()
 
 def cv2_tm_method_to_str(method: int) -> str:
     """将OpenCV模板匹配方法转换为字符串表示"""

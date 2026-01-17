@@ -40,19 +40,19 @@ python tests/test_basic.py
 - ✅ 集成OpenCV进行图像预处理
 - ✅ 实现多种图像匹配算法
 - ✅ 集成Tesseract OCR识别文本
-- ⬜ 开发自适应阈值识别系统
+- ✅ 开发自适应阈值识别系统
 - ⬜ 添加图像特征点检测功能
 
 #### 1. 集成OpenCV进行图像预处理
 ```bash
 # 将要查找的图片保存到项目templates目录
-python tests/test_smart_automation.py
+python scripts/test_smart_automation.py
 
 # 创建模板
 python scripts/create_template.py
 
 # 运行综合测试
-python tests/test_opencv_matching.py
+python scripts/test_opencv_matching.py
 ```
 
 #### 2. 实现多种图像匹配算法
@@ -72,6 +72,12 @@ python scripts/download_tessdata.py
 
 # OCR测试
 python scripts/test_ocr_recognition.py
+```
+
+#### 4. 开发自适应阈值识别系统
+```bash
+# 自适应阈值识别测试
+python scripts/test_adaptive_threshold.py
 ```
 
 
