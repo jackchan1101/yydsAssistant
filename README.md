@@ -39,7 +39,7 @@ python tests/test_basic.py
 ### 第二阶段：基础自动化实现
 - ✅ 集成OpenCV进行图像预处理
 - ✅ 实现多种图像匹配算法
-- ⬜ 集成Tesseract OCR识别游戏内文本
+- ✅ 集成Tesseract OCR识别文本
 - ⬜ 开发自适应阈值识别系统
 - ⬜ 添加图像特征点检测功能
 
@@ -65,24 +65,29 @@ python scripts/test_advanced_matching.py
 python scripts/test_real_world.py
 ```
 
+#### 3. 集成Tesseract OCR识别文本
+```bash
+# 没有语言包先下载
+python scripts/download_tessdata.py
+
+# OCR测试
+python scripts/test_ocr_recognition.py
+```
+
 
 ### 基本使用
 ```python
 from src.core.automation import create_automation
 
 创建自动化实例
-
 automation = create_automation()
 
 截图
-
 screenshot = automation.screenshot()
 
 查找并点击图片
-
 automation.click_image("templates/button.png")
 
 等待图片出现
-
 center = automation.wait_until_image_appears("templates/dialog.png", timeout=10)
 ```

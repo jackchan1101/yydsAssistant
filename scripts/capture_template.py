@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 模板图片捕获工具
-用于捕获游戏界面元素作为模板图片
+用于捕获界面元素作为模板图片
 """
 import sys
 import os

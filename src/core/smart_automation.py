@@ -15,13 +15,25 @@ from PIL import ImageGrab, Image
 import pytesseract
 
 from ..utils.logger import get_logger
-
-# 设置Tesseract命令路径 (根据你的安装位置调整)
-# 注意：这通常在系统环境变量中配置更好，这里作为备用。
-# pytesseract.pytesseract.tesseract_cmd = r'D:\DevTools\Tesseract-OCR\tesseract.exe'
+from src.core.ocr_recognizer import TextRecognitionResult, OCRRecognizer
 
 # 初始化日志
 logger = get_logger(__name__)
+
+# 设置Tesseract命令路径
+try:
+    # Windows 默认安装路径
+    from src.utils.tesseract_utils import get_tesseract_config
+    tesseract_config = get_tesseract_config()
+    if tesseract_config.get_tesseract_cmd():
+        pytesseract.pytesseract.tesseract_cmd = tesseract_config.get_tesseract_cmd()
+    # 检查Tesseract是否可用
+    import subprocess
+    subprocess.run([pytesseract.pytesseract.tesseract_cmd, '--version'], 
+                   capture_output=True, text=True)
+    logger.info("Tesseract OCR 初始化成功")
+except Exception as e:
+    logger.warning(f"Tesseract OCR 初始化失败: {e}. 请确保已正确安装Tesseract")
 
 
 @dataclass
@@ -50,6 +62,11 @@ class SmartAutomation:
         """
         self.config = config or {}
         self._init_default_config()
+
+        # 初始化OCR识别器
+        ocr_config = self.config.get('ocr', {})
+        self.ocr_recognizer = OCRRecognizer(ocr_config)
+
         logger.info("SmartAutomation模块初始化完成")
 
     def _init_default_config(self):
@@ -69,6 +86,26 @@ class SmartAutomation:
                 'multi_scale': False,  # 是否启用多尺度匹配
                 'scale_range': (0.5, 1.5),  # 尺度搜索范围
                 'scale_steps': 5,  # 尺度搜索步数
+            },
+            'ocr': {
+                'languages': ['chi_sim', 'eng'],
+                'preprocess': {
+                    'grayscale': True,
+                    'denoise': True,
+                    'contrast_enhance': True,
+                    'scale_factor': 2.0,
+                    'threshold_method': 'otsu',
+                },
+                'ocr_config': {
+                    'language': 'chi_sim+eng',
+                    'psm': 6,
+                    'oem': 3,
+                    'dpi': 300,
+                },
+                'advanced': {
+                    'use_bilateral_filter': True,
+                    'clahe_clip_limit': 2.0,
+                }
             }
         }
 
@@ -684,6 +721,161 @@ class SmartAutomation:
         }
         
         return configs.get(image_type, configs['ui'])
+    
+    def extract_text(self, 
+                    region: Optional[Tuple[int, int, int, int]] = None,
+                    language: str = 'eng+chi_sim') -> TextRecognitionResult:
+        """
+        从屏幕区域提取文本
+        
+        Args:
+            region: 屏幕区域 (left, top, width, height)
+            language: OCR语言
+            
+        Returns:
+            TextRecognitionResult: 识别结果
+        """
+        # 截取屏幕
+        screenshot = self.capture_screen(region)
+        
+        # 识别文本
+        if region:
+            result = self.ocr_recognizer.extract_text_from_region(
+                screenshot, (0, 0, screenshot.shape[1], screenshot.shape[0]), language
+            )
+        else:
+            result = self.ocr_recognizer.extract_text(screenshot, language)
+        
+        return result
+    
+    def find_text_on_screen(self,
+                           target_text: str,
+                           region: Optional[Tuple[int, int, int, int]] = None,
+                           language: str = 'eng+chi_sim',
+                           case_sensitive: bool = False,
+                           similarity_threshold: float = 0.8) -> List[TextRecognitionResult]:
+        """
+        在屏幕上查找特定文本
+        
+        Args:
+            target_text: 目标文本
+            region: 搜索区域
+            language: OCR语言
+            case_sensitive: 是否区分大小写
+            similarity_threshold: 文本相似度阈值
+            
+        Returns:
+            找到的文本结果列表
+        """
+        # 截取屏幕
+        screenshot = self.capture_screen(region)
+        
+        # 查找文本
+        if region:
+            # 调整区域坐标
+            results = []
+            full_result = self.ocr_recognizer.extract_text(screenshot, language)
+            
+            if full_result.text:
+                # 在结果中搜索目标文本
+                lines = full_result.text.split('\n')
+                for line in lines:
+                    if not line.strip():
+                        continue
+                    
+                    text_to_check = line if case_sensitive else line.lower()
+                    target_to_check = target_text if case_sensitive else target_text.lower()
+                    
+                    if target_to_check in text_to_check:
+                        similarity = self.ocr_recognizer._calculate_text_similarity(
+                            text_to_check, target_to_check
+                        )
+                        
+                        if similarity >= similarity_threshold:
+                            results.append(TextRecognitionResult(
+                                text=line.strip(),
+                                confidence=full_result.confidence,
+                                position=full_result.position,  # 简化位置
+                                language=language
+                            ))
+            
+            return results
+        else:
+            return self.ocr_recognizer.find_text(
+                screenshot, target_text, language, case_sensitive, similarity_threshold
+            )
+    
+    def wait_for_text(self,
+                     target_text: str,
+                     timeout: float = 10.0,
+                     check_interval: float = 0.5,
+                     region: Optional[Tuple[int, int, int, int]] = None,
+                     language: str = 'eng+chi_sim') -> Optional[TextRecognitionResult]:
+        """
+        等待特定文本出现
+        
+        Args:
+            target_text: 目标文本
+            timeout: 超时时间（秒）
+            check_interval: 检查间隔（秒）
+            region: 搜索区域
+            language: OCR语言
+            
+        Returns:
+            找到的文本结果，超时返回None
+        """
+        import time
+        
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            results = self.find_text_on_screen(
+                target_text, region, language, case_sensitive=False
+            )
+            
+            if results:
+                logger.info(f"找到文本: '{target_text}'")
+                return results[0]
+            
+            time.sleep(check_interval)
+        
+        logger.warning(f"等待文本超时: '{target_text}'")
+        return None
+    
+    def click_text(self,
+                  target_text: str,
+                  region: Optional[Tuple[int, int, int, int]] = None,
+                  language: str = 'eng+chi_sim',
+                  offset: Tuple[int, int] = (0, 0),
+                  button: str = 'left',
+                  clicks: int = 1) -> bool:
+        """
+        查找并点击文本
+        
+        Args:
+            target_text: 目标文本
+            region: 搜索区域
+            language: OCR语言
+            offset: 点击偏移
+            button: 鼠标按钮
+            clicks: 点击次数
+            
+        Returns:
+            是否成功点击
+        """
+        results = self.find_text_on_screen(target_text, region, language)
+        
+        if results:
+            result = results[0]
+            x = result.position[0] + result.position[2] // 2 + offset[0]
+            y = result.position[1] + result.position[3] // 2 + offset[1]
+            
+            pyautogui.click(x=x, y=y, button=button, clicks=clicks)
+            logger.info(f"已点击文本 '{target_text}' 位置: ({x}, {y})")
+            return True
+        else:
+            logger.warning(f"未找到文本: '{target_text}'")
+            return False
 
 def cv2_tm_method_to_str(method: int) -> str:
     """将OpenCV模板匹配方法转换为字符串表示"""

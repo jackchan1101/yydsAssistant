@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-游戏自动化工具 - 主程序入口
+自动化工具 - 主程序入口
 """
 import sys
 import os
@@ -29,6 +29,18 @@ def initialize_environment():
     for dir_name in directories:
         dir_path = project_root / dir_name
         dir_path.mkdir(exist_ok=True)
+
+    # 初始化Tesseract配置
+    from src.utils.tesseract_utils import init_tesseract
+    tesseract_config = init_tesseract()
+
+    # 检查状态
+    if tesseract_config.is_available():
+        print("✓ Tesseract配置成功")
+        cmd = tesseract_config.get_tesseract_cmd()
+        print(f"  Tesseract路径: {cmd}")
+    else:
+        print("✗ Tesseract配置失败")
     
     # 设置日志
     logger = setup_logger(
@@ -40,7 +52,7 @@ def initialize_environment():
     )
     
     logger.info("=" * 50)
-    logger.info("游戏自动化工具启动")
+    logger.info("自动化工具启动")
     logger.info(f"项目根目录: {project_root}")
     logger.info("=" * 50)
     
@@ -92,7 +104,7 @@ def main():
     except Exception as e:
         logger.error(f"程序运行异常: {e}", exc_info=True)
     finally:
-        logger.info("游戏自动化工具关闭")
+        logger.info("自动化工具关闭")
 
 
 if __name__ == "__main__":

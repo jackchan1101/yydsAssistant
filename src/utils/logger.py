@@ -9,7 +9,7 @@ from typing import Optional
 
 
 class GameAutomationLogger:
-    """游戏自动化日志记录器"""
+    """自动化日志记录器"""
     
     def __init__(self, 
                  name: str = "GameAutomation",

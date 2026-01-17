@@ -161,6 +161,26 @@ class ConfigManager:
         
         # 保存更新后的配置
         return self.save_config(filename, config_data)
+    
+    def get_tesseract_config(self, config_filename: str = "settings.yaml") -> Dict[str, Any]:
+        """
+        获取Tesseract相关配置
+        
+        Args:
+            config_filename: 配置文件名
+            
+        Returns:
+            Dict: 包含tesseract_path和ocr_languages的配置
+        """
+        return {
+            "tesseract_path": self.get_value(config_filename, "recognition.tesseract_path", 
+                                        r'D:/DevTools/Tesseract-OCR/tesseract.exe'),
+            "ocr_languages": self.get_value(config_filename, "recognition.ocr_languages", "chi_sim+eng"),
+            "use_whitelist": self.get_value(config_filename, "recognition.use_whitelist", False),
+            "whitelist_chars": self.get_value(config_filename, "recognition.whitelist_chars", 
+                                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+            "psm": self.get_value(config_filename, "recognition.psm", 6)
+        }
 
 
 # 全局配置管理器实例

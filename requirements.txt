@@ -1,20 +1,25 @@
-pyautogui==0.9.54 
+# 核心控制依赖
+pyautogui==0.9.54  # 鼠标键盘自动化控制核心库
+keyboard==0.13.5  # 全局键盘监听，热键功能
 
-opencv-python==4.9.0.80
-Pillow==10.1.0 
-numpy==1.26.4
+# 图像识别依赖
+opencv-python==4.9.0.80  # OpenCV计算机视觉库，用于图像处理识别
+Pillow==10.1.0  # PIL图像处理库，Tesseract依赖
+numpy==1.26.4  # 数值计算库，OpenCV依赖
 
-pytesseract==0.3.10 
+# OCR文字识别
+pytesseract==0.3.10  # Python Tesseract OCR封装
 
-PyQt5==5.15.10 
-PyQt5-Qt5==5.15.2
-PyQt5-sip==12.13.0
+# 用户界面依赖
+PyQt5==5.15.10  # PyQt5 GUI框架
+PyQt5-Qt5==5.15.2  # Qt5运行时库
+PyQt5-sip==12.13.0  # PyQt5绑定生成器
 
-PyYAML==6.0.1
-colorlog==6.7.0
+# 配置管理依赖
+PyYAML==6.0.1  # YAML配置文件解析
+colorlog==6.7.0  # 彩色日志输出
 
-pytest==7.4.3 
-black==23.11.0 
-flake8==6.1.0
-
-keyboard==0.13.5
+# 开发工具依赖
+pytest==7.4.3  # 单元测试框架
+black==23.11.0  # 代码格式化工具
+flake8==6.1.0  # 代码风格检查

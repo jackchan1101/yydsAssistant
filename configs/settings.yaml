@@ -46,7 +46,7 @@ logging:
 
 tasks: []
 
-# 游戏自动化工具配置
+# 自动化工具配置
 general:
   debug_mode: false
   log_level: "INFO"
@@ -57,7 +57,7 @@ recognition:
   default_match_method: "adaptive"
   default_threshold: 0.8
   default_preprocess: "adaptive"
-  tesseract_path: "D:\\DevTools\\Tesseract-OCR\\tesseract.exe"
+  tesseract_path: "D:/DevTools/Tesseract-OCR/tesseract.exe"
   ocr_languages: "chi_sim+eng"
   use_multiscale: true
   multiscale_range: [0.8, 1.2, 0.1]
@@ -67,5 +67,3 @@ performance:
   retry_delay: 1.0
   timeout: 10.0
   cache_size: 100
-
-  
